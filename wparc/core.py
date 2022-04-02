@@ -47,7 +47,8 @@ def cli2():
 @click.option('--domain', '-d', default=None, help='URL of the public resource to process')
 @click.option('--verbose', '-v', is_flag=True, help='Verbose output. Print additional info')
 @click.option('--all', '-a', is_flag=True, default=True, help='Include unknown API routes')
-def dump(domain, verbose, all):
+@click.option('--https', '-h', is_flag=True, default=False, help='Force HTTPS (default: False)')
+def dump(domain, verbose, all, https):
     """Dump Wordpress data from API"""
     if verbose:
         enableVerbose()
@@ -55,11 +56,31 @@ def dump(domain, verbose, all):
         print('Domain name required, for example "example.com"')
         return
     acmd = Project()
-    acmd.dump(domain, all)
+    acmd.dump(domain, all, https)
+    pass
+
+@click.group()
+def cli3():
     pass
 
 
-cli = click.CommandCollection(sources=[cli1, cli2])
+@cli3.command()
+@click.option('--domain', '-d', default=None, help='URL of the public resource to process')
+@click.option('--verbose', '-v', is_flag=True, help='Verbose output. Print additional info')
+@click.option('--https', '-h', is_flag=True, default=False, help='Force HTTPS (default: False)')
+def ping(domain, verbose, https):
+    """Dump Wordpress data from API"""
+    if verbose:
+        enableVerbose()
+    if domain is None:
+        print('Domain name required, for example "example.com"')
+        return
+    acmd = Project()
+    acmd.ping(domain, https)
+    pass
+
+
+cli = click.CommandCollection(sources=[cli1, cli2, cli3])
 
 # if __name__ == '__main__':
 #    cli()

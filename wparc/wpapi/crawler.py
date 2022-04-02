@@ -111,7 +111,7 @@ def dump_route_list(url, route, filepath):
             break
         data = resp.json()
         if isinstance(data, dict):
-            logging.debugo('- end of iteration %s' % (route))
+            logging.debug('- end of iteration %s' % (route))
             break
         elif isinstance(data, list):
             if len(data) == 0:
@@ -136,12 +136,26 @@ def dump_route_dict(url, route, filepath):
         f.close()
 
 
-def collect_data(domain, get_unknown=True):
+def ping(domain, force_https=False):
+    prefix = 'https' if force_https else 'http'
+    url = prefix + '://' + domain + '/wp-json/'
+    wptext = requests.get(url, headers=REQUEST_HEADER, timeout=DEFAULT_TIMEOUT)
+    try:
+        wpjson = wptext.json()
+        allroutes = list(wpjson['routes'].keys())
+        print('Endpoint %s is OK' % (url))
+        print('Total routes %d' % (len(allroutes)))
+    except:
+        print('Endpoint %s is invalid' % (url))
+
+
+def collect_data(domain, get_unknown=True, force_https=False):
+    prefix = 'https' if force_https else 'http'
     known_routes_filename = pkg_resources.resource_filename('wparc', 'data/known_routes.yml')
     f = open(known_routes_filename, 'r', encoding='utf8')
     known_routes = yaml.load(f, Loader=Loader)
     f.close()
-    url = 'https://' + domain + '/wp-json/'
+    url = prefix + '://' + domain + '/wp-json/'
     wptext = requests.get(url, headers=REQUEST_HEADER, timeout=DEFAULT_TIMEOUT)
     wpjson = wptext.json()
     allroutes = list(wpjson['routes'].keys())
