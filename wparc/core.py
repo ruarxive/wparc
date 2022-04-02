@@ -69,7 +69,7 @@ def cli3():
 @click.option('--verbose', '-v', is_flag=True, help='Verbose output. Print additional info')
 @click.option('--https', '-h', is_flag=True, default=False, help='Force HTTPS (default: False)')
 def ping(domain, verbose, https):
-    """Dump Wordpress data from API"""
+    """Ping wordpress website API endpoint"""
     if verbose:
         enableVerbose()
     if domain is None:
