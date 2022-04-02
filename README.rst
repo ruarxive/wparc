@@ -63,6 +63,20 @@ See also ``python -m wparc`` and ``wparc [command] --help`` for help for each co
 Commands
 ========
 
+
+Ping command
+----------------
+Pings /wp-json/ API endpoint of selected domain
+
+
+Pings /wp-json/ endpoint "https://arctic.gov.ru" website
+
+.. code-block:: bash
+
+    $ wparc ping --domain arctic.gov.ru
+
+
+
 Dump command
 ----------------
 Dumps all data routes listed in /wp-json/ API endpoint
@@ -80,7 +94,7 @@ Getfiles command
 ----------------
 Downloads all media file listed in "wp_v2_media.jsonl" file that should be dumped using command "dump"
 
-Downloads all media from "dissident.memo.ru" website 
+Downloads all media from "dissident.memo.ru" website
 
 .. code-block:: bash
 
