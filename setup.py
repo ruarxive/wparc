@@ -36,8 +36,10 @@ tests_require = [
 
 install_requires = [
     'lxml',
-    'click',
-    'pyyaml'
+    'typer',
+    'pyyaml',
+    'requests',
+    'urllib3'
 ]
 
 
