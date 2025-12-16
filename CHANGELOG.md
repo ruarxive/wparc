@@ -9,9 +9,10 @@ All notable changes to this project will be documented in this file.
 ### Added
 - WordPress pagination headers support (X-WP-TotalPages and X-WP-Total) in dump command
 - Progress tracking showing "page X of Y" when pagination headers are available
+- Summary logging showing total records and pages processed after completion
 
 ### Fixed
-- Replaced deprecated pkg_resources with importlib.resources
+- Replaced deprecated pkg_resources with importlib.resources (Python 3.9+ uses modern API)
 - Fixed setuptools warning about missing wparc.data package
 
 ## 1.0.2 (2022-04-02)
@@ -25,8 +26,6 @@ All notable changes to this project will be documented in this file.
 - Development dependencies in setup.py extras
 - Improved error messages with actionable guidance
 - Better logging throughout (replaced print statements)
-- WordPress pagination headers support (X-WP-TotalPages and X-WP-Total) in dump command
-- Progress tracking showing "page X of Y" when pagination headers are available
 
 ### Changed
 - Replaced Click with Typer for modern CLI framework
