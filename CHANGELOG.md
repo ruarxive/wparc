@@ -4,6 +4,26 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## 1.0.7 (2025-12-16)
+
+### Added
+- Enhanced `analyze` command with automatic route testing and categorization
+- Automatic YAML generation for unknown routes to update `known_routes.yml`
+- Custom exception classes (`DomainValidationError`, `APIError`, `SSLVerificationError`, `FileDownloadError`, `MediaFileNotFoundError`, `CheckpointError`) for better error handling
+- Domain validation utility function with comprehensive validation rules
+- Utility functions for formatting bytes and duration (`format_bytes`, `format_duration`)
+- Comprehensive test suite with tests for exceptions, utilities, and crawler functionality
+- GitHub Actions workflow for automated testing
+- Better error messages with actionable suggestions for common issues
+
+### Changed
+- Improved `analyze` command output with categorized route statistics
+- Enhanced error handling in main entry point with KeyboardInterrupt handling
+- Better exception messages with context-specific suggestions
+
+### Fixed
+- Removed unused `wparc/cmds/__init__.py` file
+
 ## 1.0.5 (2024-12-19)
 
 ### Fixed
