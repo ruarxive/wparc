@@ -1,0 +1,51 @@
+# Changelog
+
+All notable changes to this project will be documented in this file.
+
+## [Unreleased]
+
+### Added
+- Type hints throughout the codebase for better IDE support and type safety
+- Module-level docstrings for better documentation
+- Configurable timeout, page size, and retry count via CLI options
+- SSL verification option (enabled by default for security)
+- Generator-based file processing for memory efficiency
+- Development dependencies in setup.py extras
+- Improved error messages with actionable guidance
+- Better logging throughout (replaced print statements)
+- WordPress pagination headers support (X-WP-TotalPages and X-WP-Total) in dump command
+- Progress tracking showing "page X of Y" when pagination headers are available
+
+### Changed
+- Replaced Click with Typer for modern CLI framework
+- Changed `domain` from option to required argument
+- Improved error handling with specific exception types
+- All file operations now use context managers
+- Better function naming (snake_case throughout)
+- Consolidated CLI structure (removed duplicate groups)
+
+### Fixed
+- Fixed trailing space bug in media filename
+- Fixed command injection vulnerability (replaced os.system with subprocess)
+- Fixed bare except clauses with specific exception handling
+- Fixed incorrect project references (yspcrawler → wparc)
+- Fixed missing dependencies in setup.py
+- Fixed incorrect test configuration in tox.ini
+- Removed all commented-out code
+- Fixed unused variables
+
+### Security
+- SSL verification enabled by default
+- Command injection vulnerabilities fixed
+- Secure file handling with context managers
+- Proper error handling to prevent information leakage
+
+## 1.0.2 (2022-04-02)
+
+* Added command "ping" to verify existence of /wp-json/ endpoint
+* Added option "https" for "ping" and "dump" commands. It forces using https by default instead of http
+
+## 1.0.1 (2022-03-31)
+
+* First public release on PyPI and updated github code
+
