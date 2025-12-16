@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## 1.0.5 (2024-12-19)
+
+### Fixed
+- Fixed setup.py dependencies: replaced 'click' with 'typer'
+- Added missing 'requests' and 'urllib3' dependencies to install_requires
+
 ## 1.0.4 (2024-12-19)
 
 ### Changed
