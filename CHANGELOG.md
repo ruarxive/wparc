@@ -4,6 +4,17 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## 1.0.4 (2024-12-19)
+
+### Changed
+- Migrated all documentation from RST to Markdown format
+- Updated setup.py to use README.md instead of README.rst
+- Added long_description_content_type='text/markdown' to setup.py
+
+### Removed
+- Removed AUTHORS.rst, HISTORY.rst, and README.rst files
+- Removed reference to CONTRIBUTING.rst from tox.ini
+
 ## 1.0.3 (2024-12-19)
 
 ### Added
