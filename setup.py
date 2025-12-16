@@ -60,7 +60,7 @@ extras_require = {
 
 
 def long_description():
-    with codecs.open('README.rst', encoding='utf8') as f:
+    with codecs.open('README.md', encoding='utf8') as f:
         return f.read()
 
 
@@ -69,6 +69,7 @@ setup(
     version=wparc.__version__,
     description=wparc.__doc__.strip(),
     long_description=long_description(),
+    long_description_content_type='text/markdown',
     url='https://github.com/ruarxive/wparc/',
     download_url='https://github.com/ruarxive/wparc/',
     packages=find_packages(exclude=('tests', 'tests.*')),
