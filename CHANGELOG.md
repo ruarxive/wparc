@@ -4,6 +4,18 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## 1.0.3 (2024-12-19)
+
+### Added
+- WordPress pagination headers support (X-WP-TotalPages and X-WP-Total) in dump command
+- Progress tracking showing "page X of Y" when pagination headers are available
+
+### Fixed
+- Replaced deprecated pkg_resources with importlib.resources
+- Fixed setuptools warning about missing wparc.data package
+
+## 1.0.2 (2022-04-02)
+
 ### Added
 - Type hints throughout the codebase for better IDE support and type safety
 - Module-level docstrings for better documentation

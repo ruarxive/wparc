@@ -3,6 +3,6 @@ yspcrawler: a command-line tool to backup documents from Yandex.Disk public reso
 
 """
 
-__version__ = '1.0.2'
+__version__ = '1.0.3'
 __author__ = 'Ivan Begtin'
 __licence__ = 'MIT'
