@@ -37,10 +37,12 @@ def validate_domain(domain: str) -> str:
     domain = domain.rstrip("/")
 
     # Basic domain validation regex
-    # Allows: example.com, www.example.com, subdomain.example.com, localhost, 127.0.0.1
+    # Allows: example.com, www.example.com, subdomain.example.com,
+    # localhost, 127.0.0.1
     domain_pattern = re.compile(
-        r"^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z0-9][a-z0-9-]{0,61}[a-z0-9]$|"  # Standard domain
-        r"^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$|"  # Single label (localhost, etc.)
+        r"^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z0-9]"
+        r"[a-z0-9-]{0,61}[a-z0-9]$|"  # Standard domain
+        r"^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$|"  # Single label
         r"^(?:[0-9]{1,3}\.){3}[0-9]{1,3}$|"  # IPv4
         r"^\[?[0-9a-f:]+]?$"  # IPv6 (basic check)
     )

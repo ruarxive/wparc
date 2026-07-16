@@ -4,6 +4,35 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## 1.0.8 (2026-07-16)
+
+### Security
+- Replaced `yaml.load()` with `yaml.safe_load()` to prevent arbitrary code execution from malformed route files
+- SSL certificate warnings now only suppressed when `--no-verify-ssl` is explicitly used (previously disabled globally at import time)
+
+### Changed
+- Split monolithic `crawler.py` (1200+ lines) into 5 focused modules: `resources`, `download`, `media`, `routes`, `dump`
+- Converted route lookups from lists to sets for O(1) membership testing performance
+- Migrated to `pyproject.toml`-only build system; removed `setup.py` and `setup.cfg`
+- Updated minimum Python version to 3.8 in `pyproject.toml`
+- Removed duplicate `main()` entry point; consolidated to `__main__.py` only
+- Updated `tox.ini` with correct test paths and modern Python versions
+- Updated `requirements-dev.txt` with all development dependencies (black, flake8, mypy, pytest-cov, type stubs)
+
+### Added
+- CLI integration tests using `typer.testing.CliRunner` (33 total tests, up from 26)
+- `black` code formatting configuration (line-length=100)
+- `flake8` linting configuration
+- `mypy` type checking with `types-PyYAML` and `types-requests` stubs
+- Project structure documentation in README
+
+### Fixed
+- Fixed `KeyError` when `known_routes.yml` is missing category keys (now uses `.get()` with safe defaults)
+- Fixed broken `TestCollectData` test that referenced removed `pkg_resources` module attribute
+- Fixed `.coveragerc` targeting wrong package name (`metawarc` → `wparc`)
+- Fixed all flake8 issues: trailing whitespace, line-too-long, unused imports, missing blank lines
+- Fixed all mypy errors: `union-attr` on nullable responses, missing type annotations
+
 ## 1.0.7 (2025-12-16)
 
 ### Added

@@ -1,0 +1,77 @@
+[build-system]
+requires = ["setuptools>=45", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "wparc"
+version = "1.0.7"
+description = "WordPress API Crawler and Backup Tool"
+readme = "README.md"
+requires-python = ">=3.8"
+license = {text = "MIT"}
+authors = [
+    {name = "Ivan Begtin", email = "ivan@begtin.tech"}
+]
+keywords = ["backup", "archive", "wordpress", "rest-api", "crawler"]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.6",
+    "Programming Language :: Python :: 3.7",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Intended Audience :: System Administrators",
+    "Topic :: Software Development",
+    "Topic :: System :: Networking",
+    "Topic :: Terminals",
+    "Topic :: Text Processing",
+    "Topic :: Utilities",
+]
+dependencies = [
+    "lxml",
+    "typer",
+    "pyyaml",
+    "requests",
+    "urllib3",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "tox",
+    "docutils",
+    "wheel",
+    "twine",
+    "pygments>=2.7.4",
+]
+
+[project.urls]
+Homepage = "https://github.com/ruarxive/wparc"
+Documentation = "https://github.com/ruarxive/wparc#readme"
+Repository = "https://github.com/ruarxive/wparc"
+Issues = "https://github.com/ruarxive/wparc/issues"
+
+[project.scripts]
+wparc = "wparc.__main__:main"
+
+[tool.setuptools]
+packages = ["wparc", "wparc.cmds", "wparc.wpapi", "wparc.data"]
+
+[tool.setuptools.package-data]
+wparc = ["data/*.yml"]
+
+[tool.black]
+line-length = 100
+target-version = ['py36', 'py37', 'py38', 'py39', 'py310', 'py311']
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]

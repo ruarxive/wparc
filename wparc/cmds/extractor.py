@@ -143,7 +143,7 @@ class Project:
         """
         domain = validate_domain(domain)
         verify = verify_ssl if verify_ssl is not None else self.verify_ssl
-        
+
         # Get initial analysis
         result = analyze_routes(
             domain,
@@ -151,15 +151,15 @@ class Project:
             verify_ssl=verify,
             timeout=timeout,
         )
-        
+
         # Test unknown routes if any are found
         unknown_routes = result.get("unknown_routes", [])
         wpjson = result.get("wpjson", {})
-        
+
         if unknown_routes and wpjson:
             prefix = "https" if https else "http"
             base_url = f"{prefix}://{domain}/wp-json"
-            
+
             # Test each unknown route
             categorized_routes = test_unknown_routes(
                 unknown_routes,
@@ -168,12 +168,12 @@ class Project:
                 verify_ssl=verify,
                 timeout=timeout,
             )
-            
+
             # Generate YAML update
             yaml_update = generate_routes_yaml(categorized_routes)
-            
+
             # Add to result
             result["categorized_routes"] = categorized_routes
             result["yaml_update"] = yaml_update
-        
+
         return result

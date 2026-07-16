@@ -44,9 +44,7 @@ def ping(
         "--no-verify-ssl",
         help="Disable SSL certificate verification (not recommended)",
     ),
-    timeout: int = typer.Option(
-        360, "--timeout", help="Request timeout in seconds (default: 360)"
-    ),
+    timeout: int = typer.Option(360, "--timeout", help="Request timeout in seconds (default: 360)"),
 ) -> None:
     """Ping WordPress API endpoint to verify it's accessible."""
     if verbose:
@@ -71,9 +69,7 @@ def dump(
     verbose: bool = typer.Option(
         False, "--verbose", "-v", help="Verbose output. Print additional info"
     ),
-    all_routes: bool = typer.Option(
-        True, "--all", "-a", help="Include unknown API routes"
-    ),
+    all_routes: bool = typer.Option(True, "--all", "-a", help="Include unknown API routes"),
     https: bool = typer.Option(
         True, "--https/--no-https", help="Use HTTPS (default: True, use --no-https to disable)"
     ),
@@ -82,9 +78,7 @@ def dump(
         "--no-verify-ssl",
         help="Disable SSL certificate verification (not recommended)",
     ),
-    timeout: int = typer.Option(
-        360, "--timeout", help="Request timeout in seconds (default: 360)"
-    ),
+    timeout: int = typer.Option(360, "--timeout", help="Request timeout in seconds (default: 360)"),
     page_size: int = typer.Option(
         100, "--page-size", help="Number of items per page (default: 100)"
     ),
@@ -163,9 +157,7 @@ def analyze(
         "--no-verify-ssl",
         help="Disable SSL certificate verification (not recommended)",
     ),
-    timeout: int = typer.Option(
-        360, "--timeout", help="Request timeout in seconds (default: 360)"
-    ),
+    timeout: int = typer.Option(360, "--timeout", help="Request timeout in seconds (default: 360)"),
 ) -> None:
     """Analyze WordPress API routes and compare against known routes."""
     if verbose:
@@ -174,10 +166,10 @@ def analyze(
     try:
         project = Project(verify_ssl=not no_verify_ssl)
         result = project.analyze(domain, https, timeout=timeout)
-        
+
         typer.echo(f"\n✓ Analysis complete for {result.get('url', '')}")
         typer.echo(f"✓ Total routes: {result.get('total_routes', 0)}")
-        
+
         stats = result.get("statistics", {})
         typer.echo("\nRoute Statistics:")
         typer.echo(f"  Protected: {stats.get('protected', 0)}")
@@ -185,7 +177,7 @@ def analyze(
         typer.echo(f"  Public-dict: {stats.get('public-dict', 0)}")
         typer.echo(f"  Useless: {stats.get('useless', 0)}")
         typer.echo(f"  Unknown: {stats.get('unknown', 0)}")
-        
+
         unknown_routes = result.get("unknown_routes", [])
         if unknown_routes:
             typer.echo(f"\n⚠ Found {len(unknown_routes)} unknown routes")
@@ -194,18 +186,18 @@ def analyze(
                     typer.echo(f"  - {route}")
                 if len(unknown_routes) > 10:
                     typer.echo(f"  ... and {len(unknown_routes) - 10} more")
-            
+
             # Test unknown routes and generate YAML update
             categorized_routes = result.get("categorized_routes", {})
             yaml_update = result.get("yaml_update", "")
-            
+
             if categorized_routes and yaml_update:
                 typer.echo("\n✓ Testing complete for unknown routes")
                 typer.echo("\nCategorized routes:")
                 for category, routes in categorized_routes.items():
                     if routes:
                         typer.echo(f"  {category}: {len(routes)}")
-                
+
                 typer.echo("\n" + "=" * 70)
                 typer.echo("YAML Update for known_routes.yml:")
                 typer.echo("=" * 70)
@@ -218,12 +210,3 @@ def analyze(
     except Exception as e:
         typer.echo(f"Error: {e}", err=True)
         raise typer.Exit(1)
-
-
-def main() -> None:
-    """Main entry point for the CLI."""
-    app()
-
-
-# For backward compatibility
-cli = app

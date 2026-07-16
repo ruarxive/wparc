@@ -29,9 +29,7 @@ class DomainValidationError(WparcException):
 class APIError(WparcException):
     """Raised when WordPress API request fails."""
 
-    def __init__(
-        self, url: str, status_code: Optional[int] = None, message: Optional[str] = None
-    ):
+    def __init__(self, url: str, status_code: Optional[int] = None, message: Optional[str] = None):
         self.url = url
         self.status_code = status_code
         self.message = message or "API request failed"
@@ -42,13 +40,23 @@ class APIError(WparcException):
         error_msg += f": {self.message}"
 
         if status_code == 404:
-            error_msg += "\n  Suggestion: Check if the WordPress REST API is enabled on this site."
+            error_msg += (
+                "\n  Suggestion: Check if the WordPress " "REST API is enabled on this site."
+            )
         elif status_code == 403:
-            error_msg += "\n  Suggestion: The API endpoint may be protected. Try checking site permissions."
+            error_msg += (
+                "\n  Suggestion: The API endpoint may be "
+                "protected. Try checking site permissions."
+            )
         elif status_code == 500:
-            error_msg += "\n  Suggestion: Server error. The site may be experiencing issues. Try again later."
+            error_msg += (
+                "\n  Suggestion: Server error. The site may "
+                "be experiencing issues. Try again later."
+            )
         elif status_code == 401:
-            error_msg += "\n  Suggestion: Authentication required. This endpoint may need credentials."
+            error_msg += (
+                "\n  Suggestion: Authentication required. " "This endpoint may need credentials."
+            )
 
         super().__init__(error_msg)
 
@@ -62,7 +70,10 @@ class SSLVerificationError(WparcException):
         message = f"SSL verification failed for {url}"
         if reason:
             message += f": {reason}"
-        message += "\n  Suggestion: If you trust this site, you can use --no-verify-ssl (not recommended for production)."
+        message += (
+            "\n  Suggestion: If you trust this site, you can use "
+            "--no-verify-ssl (not recommended for production)."
+        )
         super().__init__(message)
 
 
@@ -75,7 +86,9 @@ class FileDownloadError(WparcException):
         message = f"Failed to download {url}"
         if reason:
             message += f": {reason}"
-        message += "\n  Suggestion: Check your internet connection and verify the URL is accessible."
+        message += (
+            "\n  Suggestion: Check your internet connection " "and verify the URL is accessible."
+        )
         super().__init__(message)
 
 
@@ -85,7 +98,9 @@ class MediaFileNotFoundError(WparcException):
     def __init__(self, filepath: str):
         self.filepath = filepath
         message = f"Media file not found: {filepath}"
-        message += "\n  Suggestion: Run 'wparc dump <domain>' first to generate the media file list."
+        message += (
+            "\n  Suggestion: Run 'wparc dump <domain>' first " "to generate the media file list."
+        )
         super().__init__(message)
 
 

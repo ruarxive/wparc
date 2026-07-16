@@ -1,6 +1,12 @@
 tox
 pytest
+pytest-cov
+black
+flake8
+mypy
+types-PyYAML
+types-requests
 docutils
 wheel
 twine
-pygments>=2.7.4 # not directly required, pinned by Snyk to avoid a vulnerability
+pygments>=2.7.4  # pinned by Snyk to avoid vulnerability

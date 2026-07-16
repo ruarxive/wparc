@@ -25,6 +25,18 @@ wparc connects to WordPress sites via their `/wp-json/` REST API endpoint (avail
 * **Type-safe**: Full type hints for better IDE support and code quality
 * **Error handling**: Comprehensive error handling with custom exceptions and actionable error messages
 
+## What's New in v1.0.8
+
+This release focuses on security hardening, code quality, and architectural improvements:
+
+- **Security**: Replaced `yaml.load()` with `yaml.safe_load()` to prevent arbitrary code execution; SSL warnings now only suppressed when `--no-verify-ssl` is explicitly used
+- **Architecture**: Split monolithic `crawler.py` (1200+ lines) into 5 focused modules: `resources`, `download`, `media`, `routes`, `dump`
+- **Testing**: Added CLI integration tests (33 total tests, up from 26); test coverage significantly increased
+- **Code Quality**: Added black formatting, flake8 linting, mypy type checking — all passing with zero errors
+- **Build**: Migrated to `pyproject.toml`-only build system (removed `setup.py` and `setup.cfg`)
+- **Performance**: Converted route lookups from lists to sets for O(1) membership testing
+- **Reliability**: Fixed `KeyError` when `known_routes.yml` missing categories; removed duplicate entry point
+
 ## Installation
 
 ### Production Installation
@@ -545,19 +557,42 @@ data/  files/
 
 ```bash
 pytest
+
+# With coverage report
+pytest --cov=wparc --cov-report=term-missing
 ```
 
 ### Code Quality
 
 ```bash
-# Format code
-black wparc/
+# Format code (line-length=100)
+black wparc/ tests/
 
 # Type checking
-mypy wparc/
+mypy wparc/ --ignore-missing-imports
 
 # Linting
-flake8 wparc/
+flake8 wparc/ tests/ --max-line-length=100
+```
+
+### Project Structure
+
+```
+wparc/
+├── __init__.py          # Version metadata
+├── __main__.py          # CLI entry point
+├── core.py              # Typer CLI app + command definitions
+├── cmds/extractor.py    # Project class (wraps crawler functions)
+├── wpapi/
+│   ├── crawler.py       # Re-exports from sub-modules
+│   ├── resources.py     # Package resource management
+│   ├── download.py      # File download (requests/aria2)
+│   ├── media.py         # Media file collection & checkpoint
+│   ├── routes.py        # Route analysis, testing, ping
+│   └── dump.py          # Route dumping & data collection
+├── utils.py             # Domain validation, format helpers
+├── exceptions.py        # Custom exception hierarchy
+└── data/known_routes.yml
 ```
 
 ## Common Workflows

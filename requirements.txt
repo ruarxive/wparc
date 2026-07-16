@@ -1,4 +1,5 @@
 lxml
+typer
 pyyaml
-click
-pytest
+requests
+urllib3
