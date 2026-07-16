@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "wparc"
-version = "1.0.7"
+version = "1.0.8"
 description = "WordPress API Crawler and Backup Tool"
 readme = "README.md"
 requires-python = ">=3.8"
