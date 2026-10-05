@@ -17,8 +17,6 @@ classifiers = [
     "Development Status :: 5 - Production/Stable",
     "Programming Language :: Python",
     "Programming Language :: Python :: 3 :: Only",
-    "Programming Language :: Python :: 3.6",
-    "Programming Language :: Python :: 3.7",
     "Programming Language :: Python :: 3.8",
     "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
@@ -34,7 +32,6 @@ classifiers = [
     "Topic :: Utilities",
 ]
 dependencies = [
-    "lxml",
     "typer",
     "pyyaml",
     "requests",
@@ -45,10 +42,23 @@ dependencies = [
 dev = [
     "pytest",
     "tox",
+    "pytest-cov",
+    "black",
+    "flake8",
+    "mypy",
+    "types-PyYAML",
+    "types-requests",
     "docutils",
     "wheel",
     "twine",
     "pygments>=2.7.4",
+    "mkdocs>=1.5",
+    "mkdocs-material>=9.4",
+]
+
+docs = [
+    "mkdocs>=1.5",
+    "mkdocs-material>=9.4",
 ]
 
 [project.urls]
@@ -68,7 +78,7 @@ wparc = ["data/*.yml"]
 
 [tool.black]
 line-length = 100
-target-version = ['py36', 'py37', 'py38', 'py39', 'py310', 'py311']
+target-version = ['py38', 'py39', 'py310', 'py311', 'py312']
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

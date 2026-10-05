@@ -3,43 +3,41 @@
 File download module.
 
 Provides functions to download files from URLs using requests or aria2.
+
+.. note::
+    ``DEFAULT_TIMEOUT``, ``DEFAULT_CHUNK_SIZE``, ``REQUEST_HEADER`` and
+    the SSL-warning context manager now live in
+    :mod:`wparc.wpapi._common`. Importing them from there ensures all
+    wpapi modules share a single source of truth.
 """
-import contextlib
 import os
 import subprocess
 from typing import Optional, Tuple
 
 import requests
 
-import urllib3
-
-DEFAULT_TIMEOUT = 360
-DEFAULT_CHUNK_SIZE = 1024 * 1024
-
-REQUEST_HEADER = {
-    "User-Agent": (
-        "Mozilla/5.0 (Linux; Android 6.0; Nexus 5 Build/MRA58N) "
-        "AppleWebKit/537.36 (KHTML, like Gecko) "
-        "Chrome/67.0.3396.99 Mobile Safari/537.36"
-    )
-}
+from ._common import (
+    DEFAULT_CHUNK_SIZE,
+    DEFAULT_TIMEOUT,
+    REQUEST_HEADER,
+    get_ssl_warning_context,
+    urllib3_warnings_suppressed,
+)
 
 
-def _get_ssl_warning_context(verify_ssl: bool):
-    """Return context manager suppressing SSL warnings when verify_ssl is False."""
-    if not verify_ssl:
-        return urllib3_warnings_suppressed()
-    return contextlib.nullcontext()
+def _remove_partial(filepath: str) -> None:
+    """Remove a partially downloaded file if it exists.
 
-
-@contextlib.contextmanager
-def urllib3_warnings_suppressed():
-    """Context manager to temporarily suppress urllib3 InsecureRequestWarning."""
-    urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+    Used to clean up after a failed download so the next attempt can
+    re-download the file from scratch instead of seeing the stale
+    artefact and skipping it as already-downloaded.
+    """
     try:
-        yield
-    finally:
-        urllib3.enable_warnings()
+        if os.path.exists(filepath):
+            os.remove(filepath)
+    except OSError:
+        # Best-effort cleanup; never raise from cleanup.
+        pass
 
 
 def get_file(
@@ -65,7 +63,7 @@ def get_file(
         Tuple of (url, success, error_message)
     """
     if os.path.exists(filename):
-        if progress_bar:
+        if progress_bar is not None:
             progress_bar.update(1)
         return (url, True, None)
 
@@ -75,7 +73,7 @@ def get_file(
 
     if not aria2:
         try:
-            with _get_ssl_warning_context(verify_ssl):
+            with get_ssl_warning_context(verify_ssl):
                 page = requests.get(
                     url,
                     headers=REQUEST_HEADER,
@@ -97,17 +95,19 @@ def get_file(
                             # Update progress for individual file if provided
                             pass  # Main progress bar handles this
 
-            if progress_bar:
+            if progress_bar is not None:
                 progress_bar.update(1)
             return (url, True, None)
         except requests.exceptions.SSLError as e:
             error_msg = f"SSL verification failed: {e}"
-            if progress_bar:
+            _remove_partial(filename)
+            if progress_bar is not None:
                 progress_bar.update(1)
             return (url, False, error_msg)
         except requests.exceptions.RequestException as e:
             error_msg = str(e)
-            if progress_bar:
+            _remove_partial(filename)
+            if progress_bar is not None:
                 progress_bar.update(1)
             return (url, False, error_msg)
     else:
@@ -124,16 +124,28 @@ def get_file(
 
         try:
             subprocess.run(cmd, check=True, timeout=DEFAULT_TIMEOUT)
-            if progress_bar:
+            if progress_bar is not None:
                 progress_bar.update(1)
             return (url, True, None)
         except subprocess.CalledProcessError as e:
             error_msg = f"aria2 failed: {e}"
-            if progress_bar:
+            _remove_partial(filename)
+            if progress_bar is not None:
                 progress_bar.update(1)
             return (url, False, error_msg)
         except subprocess.TimeoutExpired:
             error_msg = "aria2 timeout"
-            if progress_bar:
+            _remove_partial(filename)
+            if progress_bar is not None:
                 progress_bar.update(1)
             return (url, False, error_msg)
+
+
+__all__ = [
+    "DEFAULT_CHUNK_SIZE",
+    "DEFAULT_TIMEOUT",
+    "REQUEST_HEADER",
+    "get_file",
+    "urllib3_warnings_suppressed",
+    "_remove_partial",
+]

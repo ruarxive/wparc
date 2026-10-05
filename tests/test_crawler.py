@@ -28,41 +28,18 @@ class TestGetSelfUrl:
 
     def test_get_self_url_dict(self):
         """Test extracting self URL from dict format."""
-        data = {
-            "_links": {
-                "self": {"href": "http://example.com/wp-json/wp/v2/posts/1"}
-            }
-        }
-        assert (
-            get_self_url(data)
-            == "http://example.com/wp-json/wp/v2/posts/1"
-        )
+        data = {"_links": {"self": {"href": "http://example.com/wp-json/wp/v2/posts/1"}}}
+        assert get_self_url(data) == "http://example.com/wp-json/wp/v2/posts/1"
 
     def test_get_self_url_string(self):
         """Test extracting self URL from string format."""
-        data = {
-            "_links": {
-                "self": "http://example.com/wp-json/wp/v2/posts/1"
-            }
-        }
-        assert (
-            get_self_url(data)
-            == "http://example.com/wp-json/wp/v2/posts/1"
-        )
+        data = {"_links": {"self": "http://example.com/wp-json/wp/v2/posts/1"}}
+        assert get_self_url(data) == "http://example.com/wp-json/wp/v2/posts/1"
 
     def test_get_self_url_list(self):
         """Test extracting self URL from list format."""
-        data = {
-            "_links": {
-                "self": [
-                    {"href": "http://example.com/wp-json/wp/v2/posts/1"}
-                ]
-            }
-        }
-        assert (
-            get_self_url(data)
-            == "http://example.com/wp-json/wp/v2/posts/1"
-        )
+        data = {"_links": {"self": [{"href": "http://example.com/wp-json/wp/v2/posts/1"}]}}
+        assert get_self_url(data) == "http://example.com/wp-json/wp/v2/posts/1"
 
     def test_get_self_url_none(self):
         """Test when self URL is not present."""
@@ -76,9 +53,7 @@ class TestReadMediaUrls:
 
     def test_read_media_urls(self):
         """Test reading media URLs from file."""
-        with tempfile.NamedTemporaryFile(
-            mode="w", suffix=".jsonl", delete=False
-        ) as f:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".jsonl", delete=False) as f:
             f.write('{"source_url": "http://example.com/file1.jpg"}\n')
             f.write('{"source_url": "http://example.com/file2.jpg"}\n')
             f.write('{"other": "data"}\n')  # Missing source_url
@@ -95,9 +70,7 @@ class TestReadMediaUrls:
 
     def test_read_media_urls_invalid_json(self):
         """Test reading media URLs with invalid JSON."""
-        with tempfile.NamedTemporaryFile(
-            mode="w", suffix=".jsonl", delete=False
-        ) as f:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".jsonl", delete=False) as f:
             f.write('{"source_url": "http://example.com/file1.jpg"}\n')
             f.write("invalid json\n")
             f.write('{"source_url": "http://example.com/file2.jpg"}\n')
@@ -122,9 +95,7 @@ class TestPing:
     def test_ping_success(self, mock_get):
         """Test successful ping."""
         mock_response = Mock()
-        mock_response.json.return_value = {
-            "routes": {"/wp/v2/posts": {}, "/wp/v2/pages": {}}
-        }
+        mock_response.json.return_value = {"routes": {"/wp/v2/posts": {}, "/wp/v2/pages": {}}}
         mock_response.raise_for_status = Mock()
         mock_get.return_value = mock_response
 
@@ -136,9 +107,7 @@ class TestPing:
     @patch("wparc.wpapi.routes.requests.get")
     def test_ping_ssl_error(self, mock_get):
         """Test ping with SSL error."""
-        mock_get.side_effect = requests.exceptions.SSLError(
-            "SSL verification failed"
-        )
+        mock_get.side_effect = requests.exceptions.SSLError("SSL verification failed")
 
         with pytest.raises(SSLVerificationError):
             ping("example.com", force_https=True, verify_ssl=True)
@@ -149,8 +118,8 @@ class TestPing:
         mock_response = Mock()
         mock_response.status_code = 404
         mock_get.return_value = mock_response
-        mock_response.raise_for_status.side_effect = (
-            requests.exceptions.HTTPError(response=mock_response)
+        mock_response.raise_for_status.side_effect = requests.exceptions.HTTPError(
+            response=mock_response
         )
 
         with pytest.raises(APIError) as exc_info:
@@ -164,9 +133,7 @@ class TestCollectFiles:
     def test_collect_files_media_file_not_found(self):
         """Test collect_files when media file doesn't exist."""
         with pytest.raises(MediaFileNotFoundError):
-            collect_files(
-                "nonexistent", verify_ssl=True, workers=1, resume=False
-            )
+            collect_files("nonexistent", verify_ssl=True, workers=1, resume=False)
 
     @patch("wparc.wpapi.media.get_file")
     @patch("wparc.wpapi.media.read_media_urls")
@@ -177,9 +144,7 @@ class TestCollectFiles:
             os.makedirs(os.path.dirname(media_file), exist_ok=True)
 
             with open(media_file, "w") as f:
-                f.write(
-                    '{"source_url": "http://example.com/file1.jpg"}\n'
-                )
+                f.write('{"source_url": "http://example.com/file1.jpg"}\n')
 
             mock_read.return_value = ["http://example.com/file1.jpg"]
             mock_get_file.return_value = (
@@ -188,9 +153,7 @@ class TestCollectFiles:
                 None,
             )
 
-            stats = collect_files(
-                tmpdir, verify_ssl=True, workers=1, resume=False
-            )
+            stats = collect_files(tmpdir, verify_ssl=True, workers=1, resume=False)
             assert stats["downloaded"] >= 0
             assert stats["total"] == 1
 
@@ -198,35 +161,27 @@ class TestCollectFiles:
 class TestCollectData:
     """Tests for collect_data function."""
 
+    @patch("wparc.wpapi.routes._load_known_routes")
     @patch("wparc.wpapi.dump.open", create=True)
-    @patch("wparc.wpapi.dump.get_resource_filename")
     @patch("wparc.wpapi.dump.requests.get")
-    def test_collect_data_success(
-        self, mock_get, mock_resource, mock_open
-    ):
+    def test_collect_data_success(self, mock_get, mock_open, mock_load_known):
         """Test successful data collection."""
-        mock_resource.return_value = "/path/to/known_routes.yml"
-        mock_open.return_value.__enter__.return_value.read.return_value = """
-public-list:
-  - /wp/v2/posts
-public-dict:
-  - /wp/v2/types
-protected: []
-useless: []
-"""
+        mock_load_known.return_value = {
+            "public-list": ["/wp/v2/posts"],
+            "public-dict": ["/wp/v2/types"],
+            "protected": [],
+            "useless": [],
+        }
+        mock_open.return_value.__enter__.return_value.read.return_value = (
+            "ignored - yaml.safe_load is also mocked below"
+        )
 
         mock_response = Mock()
         mock_response.json.return_value = {
             "routes": {
                 "/wp/v2/posts": {
-                    "_links": {
-                        "self": {
-                            "href": "http://example.com/wp-json/wp/v2/posts"
-                        }
-                    },
-                    "endpoints": [
-                        {"args": {"page": {}, "per_page": {}}}
-                    ],
+                    "_links": {"self": {"href": "http://example.com/wp-json/wp/v2/posts"}},
+                    "endpoints": [{"args": {"page": {}, "per_page": {}}}],
                 }
             }
         }
@@ -238,24 +193,20 @@ useless: []
         mock_open.return_value.__enter__ = Mock(return_value=mock_file)
         mock_open.return_value.__exit__ = Mock(return_value=None)
 
-        with patch("wparc.wpapi.dump.yaml.safe_load") as mock_yaml:
-            mock_yaml.return_value = {
-                "public-list": ["/wp/v2/posts"],
-                "public-dict": ["/wp/v2/types"],
-                "protected": [],
-                "useless": [],
-            }
-            with patch("wparc.wpapi.dump.os.makedirs"):
-                with patch("wparc.wpapi.dump.TQDM_AVAILABLE", False):
-                    stats = collect_data(
-                        "example.com",
-                        get_unknown=False,
-                        force_https=True,
-                        verify_ssl=True,
-                        timeout=360,
-                        page_size=100,
-                        retry_count=5,
-                    )
+        # Mock_yaml is set at the decorator level (mock_load_known); the
+        # legacy ``yaml.safe_load`` patch is no longer needed because the
+        # loader is now invoked through the cached helper.
+        with patch("wparc.wpapi.dump.os.makedirs"):
+            with patch("wparc.wpapi.dump.TQDM_AVAILABLE", False):
+                stats = collect_data(
+                    "example.com",
+                    get_unknown=False,
+                    force_https=True,
+                    verify_ssl=True,
+                    timeout=360,
+                    page_size=100,
+                    retry_count=5,
+                )
 
         assert stats["routes_processed"] >= 0
         assert "total_routes" in stats

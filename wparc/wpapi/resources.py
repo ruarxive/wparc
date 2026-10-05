@@ -52,9 +52,7 @@ def get_resource_filename(package: str, resource: str) -> str:
                     path_str = str(p)
                 return path_str
         except Exception as e:
-            logging.warning(
-                f"Failed to get resource using importlib.resources: {e}"
-            )
+            logging.warning(f"Failed to get resource using importlib.resources: {e}")
             # Fall through to pkg_resources fallback
     # Fallback to pkg_resources for older Python versions or if importlib fails
     try:

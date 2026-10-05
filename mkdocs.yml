@@ -1,0 +1,61 @@
+site_name: wparc
+site_description: WordPress API crawler and backup tool
+site_url: https://github.com/ruarxive/wparc
+repo_url: https://github.com/ruarxive/wparc
+repo_name: ruarxive/wparc
+
+theme:
+  name: material
+  palette:
+    primary: indigo
+    accent: indigo
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.indexes
+    - content.code.copy
+    - search.suggest
+
+markdown_extensions:
+  - admonition
+  - codehilite
+  - toc:
+      permalink: true
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.superfences
+
+plugins:
+  - search
+
+nav:
+  - Home: index.md
+  - Installation: install.md
+  - Quick start: quickstart.md
+  - Commands:
+      - commands/index.md
+      - ping: commands/ping.md
+      - dump: commands/dump.md
+      - getfiles: commands/getfiles.md
+      - analyze: commands/analyze.md
+      - index: commands/index.md
+      - warc: commands/warc.md
+  - HTTP options: http-options.md
+  - Output formats:
+      - output/index.md
+      - SQLite: output/sqlite.md
+      - WARC: output/warc.md
+  - API reference:
+      - api/index.md
+      - Auto-generated: api/auto.md
+      - WordPress endpoints: api/wp-endpoints.md
+  - Development:
+      - dev/index.md
+      - Contributing: contributing.md
+      - Security: security.md
+      - Changelog: changelog.md
+      - Code review: dev-history/code-analysis.md
+      - Improvement suggestions: dev-history/improvement-suggestions.md
+      - Improvement examples: dev-history/improvement-examples.md
+      - Quick fixes: dev-history/quick-fixes.md
+      - Review summary: dev-history/review-summary.md

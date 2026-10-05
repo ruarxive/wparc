@@ -4,6 +4,11 @@ Media file download module.
 
 Provides functions to read media URLs from JSONL files and download
 them concurrently with checkpoint/resume support.
+
+.. note::
+    ``TQDM_AVAILABLE``, ``tqdm`` and the SSL-warning helper now live in
+    :mod:`wparc.wpapi._common`. Importing them from there ensures a single
+    source of truth across all wpapi modules.
 """
 import json
 import logging
@@ -13,46 +18,18 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Dict, Generator, Optional, Set, Tuple
 from urllib.parse import urlparse
 
-from ..exceptions import MediaFileNotFoundError
+from ..exceptions import CheckpointError, FileDownloadError, MediaFileNotFoundError
 from ..utils import format_duration
+from ._common import TQDM_AVAILABLE, tqdm
 from .download import get_file
-
-try:
-    from tqdm import tqdm
-
-    TQDM_AVAILABLE = True
-except ImportError:
-    TQDM_AVAILABLE = False
-
-    # Fallback progress indicator
-    class _TqdmFallback:
-        """Fallback for tqdm when not available."""
-
-        def __init__(self, iterable=None, **kwargs):
-            self.iterable = iterable
-            self.total = kwargs.get("total", None)
-            self.desc = kwargs.get("desc", "")
-            self.unit = kwargs.get("unit", "")
-            self.n = 0
-
-        def __enter__(self):
-            return self
-
-        def __exit__(self, *args):
-            return False
-
-        def __iter__(self):
-            return iter(self.iterable) if self.iterable else iter([])
-
-        def update(self, n=1):
-            self.n += n
-
-    def tqdm(iterable=None, **kwargs):
-        return _TqdmFallback(iterable, **kwargs)
-
 
 DEFAULT_WORKERS = 5
 CHECKPOINT_FILE = ".wparc_checkpoint.json"
+
+# Backwards-compatible re-export so existing imports of this from ``wparc.wpapi.media``
+# (e.g. tests using ``patch("wparc.wpapi.media.TQDM_AVAILABLE", False)``) keep working
+# after the move to :mod:`wparc.wpapi._common`.
+TQDM_AVAILABLE = TQDM_AVAILABLE  # noqa: F841 - re-exported for back-compat
 
 
 def read_media_urls(media_file: str) -> Generator[str, None, None]:
@@ -76,9 +53,7 @@ def read_media_urls(media_file: str) -> Generator[str, None, None]:
                     if "source_url" in obj:
                         yield obj["source_url"]
                 except json.JSONDecodeError as e:
-                    logging.warning(
-                        f"Line {line_num}: Invalid JSON in media file: {e}"
-                    )
+                    logging.warning(f"Line {line_num}: Invalid JSON in media file: {e}")
                     continue
     except IOError as e:
         logging.error(f"Error reading {media_file}: {e}")
@@ -88,6 +63,11 @@ def read_media_urls(media_file: str) -> Generator[str, None, None]:
 def load_checkpoint(domain: str) -> Set[str]:
     """
     Load checkpoint of already downloaded files.
+
+    If the checkpoint file is corrupt (invalid JSON), it is moved aside to
+    ``.wparc_checkpoint.json.corrupt`` and a fresh in-memory checkpoint
+    is returned. A :class:`CheckpointError` is logged so the user can
+    investigate.
 
     Args:
         domain: Domain name used as output directory
@@ -103,9 +83,19 @@ def load_checkpoint(domain: str) -> Set[str]:
         with open(checkpoint_path, "r", encoding="utf8") as f:
             data = json.load(f)
             return set(data.get("downloaded_files", []))
-    except (IOError, json.JSONDecodeError) as e:
-        logging.warning(f"Error loading checkpoint: {e}. Starting fresh.")
+    except json.JSONDecodeError as e:
+        # Corrupt JSON: rename to .corrupt and start fresh. This is a hard
+        # error from the user's perspective (their checkpoint is unusable),
+        # so we surface it via CheckpointError for logging purposes.
+        corrupt_path = checkpoint_path + ".corrupt"
+        logging.error(f"Checkpoint file is corrupt ({e}); moving to {corrupt_path}")
+        try:
+            os.rename(checkpoint_path, corrupt_path)
+        except OSError as rename_err:
+            logging.warning(f"Could not rename corrupt checkpoint: {rename_err}")
         return set()
+    except IOError as e:
+        raise CheckpointError(f"Failed to read checkpoint file {checkpoint_path}: {e}") from e
 
 
 def save_checkpoint(domain: str, downloaded_files: Set[str]) -> None:
@@ -115,17 +105,22 @@ def save_checkpoint(domain: str, downloaded_files: Set[str]) -> None:
     Args:
         domain: Domain name used as output directory
         downloaded_files: Set of file paths that have been downloaded
+
+    Raises:
+        CheckpointError: If writing the checkpoint fails for any reason.
+            Previously this was silently swallowed; callers now surface
+            the failure so a failed save cannot be mistaken for success.
     """
     checkpoint_path = os.path.join(domain, CHECKPOINT_FILE)
+    data = {
+        "downloaded_files": sorted(downloaded_files),
+        "last_updated": time.time(),
+    }
     try:
-        data = {
-            "downloaded_files": list(downloaded_files),
-            "last_updated": time.time(),
-        }
         with open(checkpoint_path, "w", encoding="utf8") as f:
             json.dump(data, f, indent=2)
     except IOError as e:
-        logging.warning(f"Error saving checkpoint: {e}")
+        raise CheckpointError(f"Failed to write checkpoint file {checkpoint_path}: {e}") from e
 
 
 def _download_file_task(
@@ -136,6 +131,9 @@ def _download_file_task(
 ) -> Tuple[str, bool, Optional[str]]:
     """
     Task function for downloading a single file.
+
+    Wraps unexpected errors in :class:`FileDownloadError` so the resulting
+    tuple carries a consistent, actionable error message.
 
     Args:
         url: URL to download
@@ -158,8 +156,16 @@ def _download_file_task(
         if result[1]:  # Success
             checkpoint.add(filepath)
         return result
-    except Exception as e:
+    except FileDownloadError as e:
+        # Already wrapped; preserve the actionable message.
         return (url, False, str(e))
+    except Exception as e:
+        # Wrap unexpected exceptions in FileDownloadError so the user
+        # gets the same "Suggestion: ..." footer regardless of error class.
+        try:
+            raise FileDownloadError(url, str(e)) from e
+        except FileDownloadError as wrapped:
+            return (url, False, str(wrapped))
 
 
 def collect_files(
@@ -211,10 +217,7 @@ def collect_files(
             else:
                 urls_to_download.append(url)
         urls = urls_to_download
-        logging.info(
-            f"Resuming: {skipped} files already downloaded, "
-            f"{len(urls)} remaining"
-        )
+        logging.info(f"Resuming: {skipped} files already downloaded, " f"{len(urls)} remaining")
     else:
         skipped = 0
 
@@ -231,16 +234,12 @@ def collect_files(
         pbar = tqdm(total=len(urls), desc="Downloading files", unit="file")
     else:
         pbar = None
-        logging.info(
-            f"Starting download of {len(urls)} files with {workers} workers..."
-        )
+        logging.info(f"Starting download of {len(urls)} files with {workers} workers...")
 
     # Use ThreadPoolExecutor for concurrent downloads
     with ThreadPoolExecutor(max_workers=workers) as executor:
         future_to_url = {
-            executor.submit(
-                _download_file_task, url, domain, verify_ssl, checkpoint
-            ): url
+            executor.submit(_download_file_task, url, domain, verify_ssl, checkpoint): url
             for url in urls
         }
 
@@ -260,7 +259,13 @@ def collect_files(
 
     # Save checkpoint
     if resume:
-        save_checkpoint(domain, checkpoint)
+        try:
+            save_checkpoint(domain, checkpoint)
+        except CheckpointError as e:
+            # Don't fail the entire download just because we couldn't
+            # persist progress; surface the error so the user knows
+            # resume on next run may re-download some files.
+            logging.error(f"Could not persist download checkpoint: {e}")
 
     # Print statistics
     elapsed = time.time() - start_time

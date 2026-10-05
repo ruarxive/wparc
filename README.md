@@ -12,6 +12,10 @@ wparc connects to WordPress sites via their `/wp-json/` REST API endpoint (avail
 - Analyze and discover WordPress API routes
 - Generate structured, machine-readable backups (JSONL format)
 - Work with any WordPress site without special permissions
+- **SQLite index** of the dump for fast post-dump queries
+- **WARC export** compatible with `metawarc`, `warc`, Common Crawl
+- **Parallel route processing** via `--workers`
+- **HTTP Basic Auth** + **proxy** + **rate-limit** for protected sites
 
 ## Main features
 
@@ -20,6 +24,13 @@ wparc connects to WordPress sites via their `/wp-json/` REST API endpoint (avail
 * **Route analysis**: Analyze and categorize WordPress API routes, automatically test unknown routes, and generate YAML updates
 * **Smart pagination**: Automatically detects and uses WordPress pagination headers (X-WP-TotalPages, X-WP-Total) for accurate progress tracking
 * **Progress tracking**: Shows "page X of Y" progress when pagination headers are available
+* **Parallel dumping**: `--workers N` runs multiple routes concurrently via a thread pool
+* **SQLite index**: `wparc index <domain>` builds `<domain>/index.sqlite3` for fast queries
+* **WARC export**: `wparc warc <domain>` writes a WARC-1.1 archive (gzipped by default)
+* **HTTP Basic Auth**: `--user / --password` for protected endpoints
+* **Proxy support**: `--proxy http://host:port`
+* **Rate limiting**: `--rate-limit 0.5` sleeps between requests
+* **Exponential backoff**: automatic retries with 0.25 → 8 s backoff
 * **SSL verification**: Secure by default with configurable SSL verification
 * **Configurable**: Customize timeout, page size, retry count, and more
 * **Type-safe**: Full type hints for better IDE support and code quality
@@ -29,13 +40,19 @@ wparc connects to WordPress sites via their `/wp-json/` REST API endpoint (avail
 
 This release focuses on security hardening, code quality, and architectural improvements:
 
-- **Security**: Replaced `yaml.load()` with `yaml.safe_load()` to prevent arbitrary code execution; SSL warnings now only suppressed when `--no-verify-ssl` is explicitly used
-- **Architecture**: Split monolithic `crawler.py` (1200+ lines) into 5 focused modules: `resources`, `download`, `media`, `routes`, `dump`
-- **Testing**: Added CLI integration tests (33 total tests, up from 26); test coverage significantly increased
-- **Code Quality**: Added black formatting, flake8 linting, mypy type checking — all passing with zero errors
-- **Build**: Migrated to `pyproject.toml`-only build system (removed `setup.py` and `setup.cfg`)
-- **Performance**: Converted route lookups from lists to sets for O(1) membership testing
-- **Reliability**: Fixed `KeyError` when `known_routes.yml` missing categories; removed duplicate entry point
+- **Security**: Replaced `yaml.load()` with `yaml.safe_load()` to prevent arbitrary code execution; SSL warnings now only suppressed when `--no-verify-ssl` is explicitly used; `validate_domain` now uses `ipaddress.ip_address()` so `:::::` and `999.999.999.999` are rejected.
+- **Architecture**: Split monolithic `crawler.py` (1200+ lines) into focused modules: `resources`, `download`, `media`, `routes`, `dump`, plus new `index/` (SQLite) and `warc/` subpackages. All shared constants and helpers (User-Agent, tqdm, SSL-warning context) live in `wparc.wpapi._common`.
+- **Performance**: `ThreadPoolExecutor` parallel route dumping, `lru_cache` for `known_routes.yml`, exponential backoff on retries, `requests.Session()` pool factory.
+- **CLI**: New `--workers`, `--user`, `--password`, `--proxy`, `--rate-limit`, `--index` flags and standalone `index` / `warc` commands. CLI error-handling consolidated into a single `handle_cli_errors` decorator.
+- **SQLite index**: New `wparc index` command and `wparc.wpapi.index.sqlite_index` module.
+- **WARC export**: New `wparc warc` command and `wparc.wpapi.warc.writer` module.
+- **HTTP Basic Auth / Proxy / Rate-limit**: Threaded through every wpapi function via the `HttpOptions` dataclass.
+- **Documentation**: Full MkDocs site (`docs/`), CONTRIBUTING.md, SECURITY.md, issue / PR templates, auto-generated API reference (`scripts/build_api_doc.py`).
+- **Testing**: **185 tests**, **82 % line coverage**, CLI integration tests.
+- **CI**: 5-job workflow: cross-platform pytest with **coverage gate 75 %**, flake8+black, mypy, MkDocs `--strict` build, CLI smoke test.
+- **Code Quality**: black formatting, flake8 linting, mypy type checking — all passing with zero errors.
+- **Build**: Migrated to `pyproject.toml`-only build system with separate `docs` extra for MkDocs.
+- **Reliability**: `dump_route_dict` no longer raises (returns bool); partial files are cleaned up on failure; corrupt checkpoint JSON is moved aside.
 
 ## Installation
 
@@ -79,10 +96,16 @@ wparc ping example.com
 wparc analyze example.com --verbose
 
 # Step 3: Dump all data from the WordPress site
-wparc dump example.com --verbose
+wparc dump example.com --verbose --workers 4
 
 # Step 4: Download all media files
 wparc getfiles example.com --verbose
+
+# Step 5: Build a SQLite index for fast queries
+wparc index example.com
+
+# Step 6: Export to WARC for the metawarc/warc ecosystem
+wparc warc example.com --output example.warc.gz
 ```
 
 ### Basic Commands
@@ -131,6 +154,10 @@ wparc ping <domain> [OPTIONS]
 - `--https`: Force HTTPS protocol (default: True, use `--no-https` to disable)
 - `--no-verify-ssl`: Disable SSL certificate verification (not recommended for security)
 - `--timeout INTEGER`: Request timeout in seconds (default: 360)
+- `--user TEXT`: HTTP Basic Auth username
+- `--password TEXT`: HTTP Basic Auth password
+- `--proxy TEXT`: HTTP proxy URL (e.g. `http://127.0.0.1:8080`)
+- `--rate-limit FLOAT`: Seconds to sleep between requests (0 disables)
 
 **What it does:**
 - Connects to the WordPress REST API endpoint (`/wp-json/`)
@@ -189,6 +216,12 @@ wparc dump <domain> [OPTIONS]
 - `--timeout INTEGER`: Request timeout in seconds (default: 360). Increase for slow sites or large datasets
 - `--page-size INTEGER`: Number of items per page (default: 100). Lower values use less memory but more requests
 - `--retry-count INTEGER`: Number of retry attempts for failed requests (default: 5)
+- `-w, --workers INTEGER`: Number of routes to fetch in parallel (default: 1 = serial). Try 4–8 for big sites.
+- `--user TEXT`: HTTP Basic Auth username
+- `--password TEXT`: HTTP Basic Auth password
+- `--proxy TEXT`: HTTP proxy URL
+- `--rate-limit FLOAT`: Seconds to sleep between requests (0 disables)
+- `--index`: Build a SQLite index (`<domain>/index.sqlite3`) after dumping
 
 **What it does:**
 - Discovers all available WordPress REST API routes
@@ -270,6 +303,8 @@ wparc getfiles <domain> [OPTIONS]
 **Options:**
 - `-v, --verbose`: Enable verbose output showing download progress and file details
 - `--no-verify-ssl`: Disable SSL certificate verification (not recommended for security)
+- `-w, --workers INTEGER`: Number of concurrent download workers (default: 5)
+- `--no-resume`: Re-download files even when a checkpoint already has them
 
 **What it does:**
 - Reads media metadata from `<domain>/data/wp_v2_media.jsonl` (created by `dump` command)
@@ -357,6 +392,10 @@ wparc analyze <domain> [OPTIONS]
 - `--https`: Force HTTPS protocol (default: True, use `--no-https` to disable)
 - `--no-verify-ssl`: Disable SSL certificate verification (not recommended for security)
 - `--timeout INTEGER`: Request timeout in seconds (default: 360)
+- `--user TEXT`: HTTP Basic Auth username
+- `--password TEXT`: HTTP Basic Auth password
+- `--proxy TEXT`: HTTP proxy URL
+- `--rate-limit FLOAT`: Seconds to sleep between requests (0 disables)
 
 **What it does:**
 1. **Route Discovery**: Fetches all available routes from `/wp-json/`
@@ -461,6 +500,33 @@ The command outputs YAML that can be directly added to `wparc/data/known_routes.
 - Identifying protected vs. public endpoints
 - Researching WordPress API capabilities
 
+## Index & WARC Commands
+
+Two extra commands process the JSONL dump produced by `wparc dump`:
+
+| Command | Output |
+|---|---|
+| `wparc index <domain>` | `<domain>/index.sqlite3` — single-table SQLite index for fast queries |
+| `wparc dump --index <index>` | Build the index in-line as part of dumping |
+| `wparc warc <domain>` | `<domain>/dump.warc.gz` — WARC 1.1 archive compatible with `metawarc` / `warc` / Common Crawl |
+
+```bash
+# Build a SQLite index
+wparc index example.com
+
+# Query the index from the stdlib CLI
+sqlite3 example.com/index.sqlite3 \
+    "SELECT id, slug FROM records WHERE id='42'"
+
+# Export the dump to a WARC archive
+wparc warc example.com --output example.warc.gz
+
+# Or uncompressed (saves CPU, costs disk)
+wparc warc example.com --no-compress --output example.warc
+```
+
+Both commands support `--verbose` for detailed progress logging.
+
 ## Output Structure
 
 After running `wparc dump <domain>`, the following directory structure is created in your current working directory:
@@ -487,6 +553,45 @@ After running `wparc dump <domain>`, the following directory structure is create
                 └── 01/
                     └── video.mp4
 ```
+
+### Post-dump Tools
+
+After a successful `wparc dump`, two extra commands help you process
+the archive:
+
+**Build a SQLite index** — for fast queries:
+
+```bash
+wparc index example.com
+# Builds example.com/index.sqlite3 with an indexed ``records`` table.
+
+# Example query (using the stdlib ``sqlite3`` CLI):
+sqlite3 example.com/index.sqlite3 \
+    "SELECT id, slug, source_file FROM records WHERE id='42'"
+```
+
+The index has dedicated columns for `id`, `slug`, `date`,
+`modified`, `status`, `link`, `title`, `type`, `author`, `parent`,
+plus a generic `extras` JSON column holding every other top-level key.
+
+You can also build the index in-line while dumping:
+
+```bash
+wparc dump example.com --index
+```
+
+**Export to WARC** — for ingestion by `metawarc`, `warc`, or Common
+Crawl tooling:
+
+```bash
+wparc warc example.com --output example.warc.gz
+# Uncompressed:
+wparc warc example.com --no-compress --output example.warc
+```
+
+The exported file is WARC 1.1, with one `warcinfo` record followed by
+one `response` record per JSONL row. Target URIs follow the pattern
+`<source_file>#<id>` (or `#<slug>` when no id is present).
 
 ### File Formats
 
@@ -562,6 +667,9 @@ pytest
 pytest --cov=wparc --cov-report=term-missing
 ```
 
+The current suite has **185 tests** with **~82 % line coverage** (gated
+at 75 % in CI). Run-times are under 3 s.
+
 ### Code Quality
 
 ```bash
@@ -575,24 +683,66 @@ mypy wparc/ --ignore-missing-imports
 flake8 wparc/ tests/ --max-line-length=100
 ```
 
+### Continuous Integration
+
+`.github/workflows/test.yml` runs **5 jobs** on every push / pull
+request:
+
+1. **test** — pytest on a 13-cell matrix (3 OS × 5 Python 3.8–3.12),
+   with `--cov=wparc`, a coverage gate of 75 %, and Codecov upload.
+2. **lint** — flake8 (critical rules + project style at line-length
+   100) + `black --check`.
+3. **type-check** — `mypy wparc/ --ignore-missing-imports`.
+4. **docs** — builds the MkDocs site with `--strict` (and a smoke-test
+   of `scripts/build_api_doc.py`).
+5. **cli-smoke** — runs `python -m wparc <command> --help` for all six
+   commands.
+
 ### Project Structure
 
 ```
 wparc/
-├── __init__.py          # Version metadata
-├── __main__.py          # CLI entry point
-├── core.py              # Typer CLI app + command definitions
-├── cmds/extractor.py    # Project class (wraps crawler functions)
+├── __init__.py              # Version metadata (__version__ = "1.0.8")
+├── __main__.py              # CLI entry point (python -m wparc)
+├── core.py                  # Typer CLI app + 6 commands + handle_cli_errors
+├── cmds/
+│   ├── __init__.py
+│   └── extractor.py         # Project class + HttpOptions dataclass
 ├── wpapi/
-│   ├── crawler.py       # Re-exports from sub-modules
-│   ├── resources.py     # Package resource management
-│   ├── download.py      # File download (requests/aria2)
-│   ├── media.py         # Media file collection & checkpoint
-│   ├── routes.py        # Route analysis, testing, ping
-│   └── dump.py          # Route dumping & data collection
-├── utils.py             # Domain validation, format helpers
-├── exceptions.py        # Custom exception hierarchy
-└── data/known_routes.yml
+│   ├── _common.py           # USER_AGENT, _TqdmFallback, make_session()
+│   ├── crawler.py           # Re-exports for backwards compat
+│   ├── resources.py         # Package resource helpers
+│   ├── download.py          # Low-level file download (requests / aria2)
+│   ├── media.py             # Media collection + checkpoint
+│   ├── routes.py            # Route analysis / _load_known_routes (cached)
+│   ├── dump.py              # Route dumping + ThreadPoolExecutor
+│   ├── index/
+│   │   ├── __init__.py
+│   │   └── sqlite_index.py  # SQLite indexer for dumped JSONL
+│   └── warc/
+│       ├── __init__.py
+│       └── writer.py        # WARC 1.1 exporter
+├── utils.py                 # validate_domain(), format_* helpers
+├── exceptions.py            # Custom exception hierarchy
+└── data/known_routes.yml    # Route catalogue (1180 routes, 4 categories)
+
+tests/                       # 13 test files, 185 tests
+├── conftest.py              # temp_dir, sample_media_file
+├── test_*.py                # One per wpapi module + integration
+
+docs/                        # MkDocs source (22 Markdown files)
+├── index.md, install.md, quickstart.md, http-options.md
+├── commands/{ping,dump,getfiles,analyze,index,warc}.md
+├── output/{sqlite,warc}.md
+├── api/{index,auto,wp-endpoints}.md
+├── dev/index.md, dev-history/...
+└── contributing.md, security.md, changelog.md
+
+scripts/
+└── build_api_doc.py         # Auto-generated API reference
+
+mkdocs.yml                   # MkDocs configuration (Material theme)
+.github/workflows/test.yml   # CI (5 jobs, coverage gate 75 %)
 ```
 
 ## Common Workflows
@@ -901,7 +1051,21 @@ See LICENSE file for details.
 
 ## Documentation
 
-For detailed information about WordPress REST API endpoints, see [WP_API_ENDPOINTS.md](docs/WP_API_ENDPOINTS.md).
+- **MkDocs site** (`mkdocs serve` locally) — command-by-command
+  reference under `docs/commands/`, output-format guides, and an
+  auto-generated API reference (`scripts/build_api_doc.py`).
+- **WordPress REST API endpoints** — see [`docs/api/wp-endpoints.md`](docs/api/wp-endpoints.md).
+- **Historical code review** — the December 2025 audit that drove the
+  post-1.0.8 work is preserved under [`docs/dev-history/`](docs/dev-history/)
+  (code analysis, improvement suggestions, quick fixes, etc.).
+
+To build the site:
+
+```bash
+pip install -e ".[docs]"
+mkdocs serve          # local preview
+mkdocs build --strict # production build
+```
 
 ## Changelog
 

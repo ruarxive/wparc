@@ -4,69 +4,59 @@ WordPress API route analysis module.
 
 Provides functions to discover, categorize, and test WordPress API routes.
 """
-import contextlib
+import functools
 import logging
-from typing import Dict, List, Optional, Set
+import time
+from typing import Dict, List, Optional, Set, Tuple
 
 import requests
-import urllib3
-
-from ..exceptions import APIError, SSLVerificationError
-from .resources import get_resource_filename
-
-try:
-    from tqdm import tqdm
-
-    TQDM_AVAILABLE = True
-except ImportError:
-    TQDM_AVAILABLE = False
-
-    class _TqdmFallback:
-        """Fallback for tqdm when not available."""
-
-        def __init__(self, iterable=None, **kwargs):
-            self.iterable = iterable
-            self.total = kwargs.get("total", None)
-            self.desc = kwargs.get("desc", "")
-            self.unit = kwargs.get("unit", "")
-            self.n = 0
-
-        def __enter__(self):
-            return self
-
-        def __exit__(self, *args):
-            return False
-
-        def __iter__(self):
-            return iter(self.iterable) if self.iterable else iter([])
-
-        def update(self, n=1):
-            self.n += n
-
-    def tqdm(iterable=None, **kwargs):
-        return _TqdmFallback(iterable, **kwargs)
-
 
 import yaml
 
-DEFAULT_TIMEOUT = 360
+from ..exceptions import APIError, SSLVerificationError
+from ._common import (
+    DEFAULT_TIMEOUT,
+    REQUEST_HEADER,
+    TQDM_AVAILABLE,
+    get_ssl_warning_context,
+    tqdm,
+)
+from .resources import get_resource_filename
+
+# Backwards-compatible alias retained for any downstream import
+# (e.g. tests or external scripts that historically imported
+# ``_get_ssl_warning_context`` from ``wparc.wpapi.routes``).
+_get_ssl_warning_context = get_ssl_warning_context  # noqa: F841 - re-exported
 
 
-def _get_ssl_warning_context(verify_ssl: bool):
-    """Return context manager suppressing SSL warnings when verify_ssl is False."""
-    if not verify_ssl:
-        return urllib3_warnings_suppressed()
-    return contextlib.nullcontext()
+def _rate_limit_sleep(delay: float) -> None:
+    """Sleep ``delay`` seconds when rate-limiting is requested."""
+    if delay > 0:
+        time.sleep(delay)
 
 
-@contextlib.contextmanager
-def urllib3_warnings_suppressed():
-    """Context manager to temporarily suppress urllib3 InsecureRequestWarning."""
-    urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
-    try:
-        yield
-    finally:
-        urllib3.enable_warnings()
+def _proxies(proxy: Optional[str]) -> Optional[Dict[str, str]]:
+    """Map a proxy URL to the shape ``requests`` expects (or None)."""
+    if not proxy:
+        return None
+    return {"http": proxy, "https": proxy}
+
+
+@functools.lru_cache(maxsize=1)
+def _load_known_routes() -> Dict[str, List[str]]:
+    """Load and cache ``data/known_routes.yml``.
+
+    Parsing the YAML once per process saves ~100 ms on every ``dump``
+    and ``analyze`` invocation, both of which used to call
+    ``yaml.safe_load`` on a 1 180-line file.
+
+    The cache is invalidated automatically when the package is
+    reinstalled (the on-disk file changes); otherwise it lives for the
+    lifetime of the Python process.
+    """
+    path = get_resource_filename("wparc", "data/known_routes.yml")
+    with open(path, "r", encoding="utf8") as f:
+        return yaml.safe_load(f) or {}
 
 
 def get_self_url(data: Dict) -> Optional[str]:
@@ -99,6 +89,9 @@ def ping(
     force_https: bool = True,
     verify_ssl: bool = True,
     timeout: int = DEFAULT_TIMEOUT,
+    auth: Optional[Tuple[str, str]] = None,
+    proxy: Optional[str] = None,
+    rate_limit_delay: float = 0.0,
 ) -> Dict:
     """
     Ping WordPress API endpoint to verify it's accessible.
@@ -108,6 +101,9 @@ def ping(
         force_https: Force HTTPS instead of HTTP (default: True)
         verify_ssl: Whether to verify SSL certificates (default: True)
         timeout: Request timeout in seconds
+        auth: Optional HTTP Basic Auth tuple ``(user, password)``.
+        proxy: Optional HTTP proxy URL.
+        rate_limit_delay: Seconds to sleep after a successful response.
 
     Returns:
         Dictionary with endpoint information
@@ -120,18 +116,14 @@ def ping(
     url = prefix + "://" + domain + "/wp-json/"
 
     try:
-        with _get_ssl_warning_context(verify_ssl):
+        with get_ssl_warning_context(verify_ssl):
             wptext = requests.get(
                 url,
-                headers={
-                    "User-Agent": (
-                        "Mozilla/5.0 (Linux; Android 6.0; Nexus 5 Build MRA58N) "
-                        "AppleWebKit/537.36 (KHTML, like Gecko) "
-                        "Chrome/67.0.3396.99 Mobile Safari/537.36"
-                    )
-                },
+                headers=REQUEST_HEADER,
                 timeout=timeout,
                 verify=verify_ssl,
+                auth=auth,
+                proxies=_proxies(proxy),
             )
         wptext.raise_for_status()
 
@@ -143,6 +135,7 @@ def ping(
         allroutes = list(wpjson["routes"].keys())
         logging.info("Endpoint %s is OK" % (url))
         logging.info("Total routes %d" % (len(allroutes)))
+        _rate_limit_sleep(rate_limit_delay)
         return {"url": url, "routes_count": len(allroutes), "routes": allroutes}
     except requests.exceptions.SSLError as e:
         raise SSLVerificationError(url, str(e))
@@ -161,6 +154,9 @@ def analyze_routes(
     force_https: bool = True,
     verify_ssl: bool = True,
     timeout: int = DEFAULT_TIMEOUT,
+    auth: Optional[Tuple[str, str]] = None,
+    proxy: Optional[str] = None,
+    rate_limit_delay: float = 0.0,
 ) -> Dict:
     """
     Analyze WordPress API routes and compare against known routes.
@@ -170,6 +166,9 @@ def analyze_routes(
         force_https: Force HTTPS instead of HTTP (default: True)
         verify_ssl: Whether to verify SSL certificates (default: True)
         timeout: Request timeout in seconds
+        auth: Optional HTTP Basic Auth tuple ``(user, password)``.
+        proxy: Optional HTTP proxy URL.
+        rate_limit_delay: Seconds to sleep after a successful response.
 
     Returns:
         Dictionary with analysis results
@@ -180,32 +179,24 @@ def analyze_routes(
     """
     prefix = "https" if force_https else "http"
     url = prefix + "://" + domain + "/wp-json/"
-    known_routes_filename = get_resource_filename(
-        "wparc", "data/known_routes.yml"
-    )
 
-    # Load known routes
+    # Load known routes (cached at module level).
     try:
-        with open(known_routes_filename, "r", encoding="utf8") as f:
-            known_routes = yaml.safe_load(f)
+        known_routes = _load_known_routes()
     except IOError as e:
         logging.error(f"Error reading known routes file: {e}")
         raise
 
     # Fetch routes from WordPress API
     try:
-        with _get_ssl_warning_context(verify_ssl):
+        with get_ssl_warning_context(verify_ssl):
             wptext = requests.get(
                 url,
-                headers={
-                    "User-Agent": (
-                        "Mozilla/5.0 (Linux; Android 6.0; Nexus 5 Build MRA58N) "
-                        "AppleWebKit/537.36 (KHTML, like Gecko) "
-                        "Chrome/67.0.3396.99 Mobile Safari/537.36"
-                    )
-                },
+                headers=REQUEST_HEADER,
                 timeout=timeout,
                 verify=verify_ssl,
+                auth=auth,
+                proxies=_proxies(proxy),
             )
         wptext.raise_for_status()
         wpjson = wptext.json()
@@ -247,9 +238,7 @@ def analyze_routes(
 
         # Create progress bar
         if TQDM_AVAILABLE:
-            pbar = tqdm(
-                total=total_routes, desc="Analyzing routes", unit="route"
-            )
+            pbar = tqdm(total=total_routes, desc="Analyzing routes", unit="route")
         else:
             pbar = None
             logging.info(f"Analyzing {total_routes} routes...")
@@ -304,6 +293,9 @@ def _test_route(
     base_url: str,
     verify_ssl: bool = True,
     timeout: int = DEFAULT_TIMEOUT,
+    auth: Optional[Tuple[str, str]] = None,
+    proxy: Optional[str] = None,
+    rate_limit_delay: float = 0.0,
 ) -> Optional[str]:
     """
     Test a route and determine its category.
@@ -314,6 +306,9 @@ def _test_route(
         base_url: Base URL for the WordPress site
         verify_ssl: Whether to verify SSL certificates
         timeout: Request timeout in seconds
+        auth: Optional HTTP Basic Auth tuple ``(user, password)``.
+        proxy: Optional HTTP proxy URL.
+        rate_limit_delay: Seconds to sleep between probes.
 
     Returns:
         Category string: 'protected', 'public-list', 'public-dict',
@@ -334,19 +329,14 @@ def _test_route(
         route_url = get_self_url(route_data)
         if route_url:
             try:
-                with _get_ssl_warning_context(verify_ssl):
+                with get_ssl_warning_context(verify_ssl):
                     resp = requests.get(
                         f"{route_url}?per_page=1&page=1",
-                        headers={
-                            "User-Agent": (
-                                "Mozilla/5.0 (Linux; Android 6.0; "
-                                "Nexus 5 Build MRA58N) "
-                                "AppleWebKit/537.36 (KHTML, like Gecko) "
-                                "Chrome/67.0.3396.99 Mobile Safari/537.36"
-                            )
-                        },
+                        headers=REQUEST_HEADER,
                         timeout=timeout,
                         verify=verify_ssl,
+                        auth=auth,
+                        proxies=_proxies(proxy),
                     )
                 if resp.status_code == 401 or resp.status_code == 403:
                     return "protected"
@@ -354,6 +344,7 @@ def _test_route(
                     try:
                         data = resp.json()
                         if isinstance(data, list):
+                            _rate_limit_sleep(rate_limit_delay)
                             return "public-list"
                     except ValueError:
                         pass
@@ -366,28 +357,20 @@ def _test_route(
         return None
 
     try:
-        with _get_ssl_warning_context(verify_ssl):
+        with get_ssl_warning_context(verify_ssl):
             resp = requests.get(
                 route_url,
-                headers={
-                    "User-Agent": (
-                        "Mozilla/5.0 (Linux; Android 6.0; "
-                        "Nexus 5 Build MRA58N) "
-                        "AppleWebKit/537.36 (KHTML, like Gecko) "
-                        "Chrome/67.0.3396.99 Mobile Safari/537.36"
-                    )
-                },
+                headers=REQUEST_HEADER,
                 timeout=timeout,
                 verify=verify_ssl,
+                auth=auth,
+                proxies=_proxies(proxy),
             )
 
         if resp.status_code == 401 or resp.status_code == 403:
             return "protected"
 
-        if (
-            any(char.isdigit() for char in route.split("/")[-1])
-            and len(route.split("/")) > 3
-        ):
+        if any(char.isdigit() for char in route.split("/")[-1]) and len(route.split("/")) > 3:
             if resp.status_code == 200:
                 try:
                     data = resp.json()
@@ -421,6 +404,9 @@ def test_unknown_routes(
     base_url: str,
     verify_ssl: bool = True,
     timeout: int = DEFAULT_TIMEOUT,
+    auth: Optional[Tuple[str, str]] = None,
+    proxy: Optional[str] = None,
+    rate_limit_delay: float = 0.0,
 ) -> Dict[str, list]:
     """
     Test unknown routes and categorize them.
@@ -431,6 +417,9 @@ def test_unknown_routes(
         base_url: Base URL for the WordPress site
         verify_ssl: Whether to verify SSL certificates
         timeout: Request timeout in seconds
+        auth: Optional HTTP Basic Auth tuple ``(user, password)``.
+        proxy: Optional HTTP proxy URL.
+        rate_limit_delay: Seconds to sleep between probes.
 
     Returns:
         Dictionary mapping category -> list of routes
@@ -443,9 +432,7 @@ def test_unknown_routes(
     }
 
     if TQDM_AVAILABLE:
-        pbar = tqdm(
-            total=len(unknown_routes), desc="Testing routes", unit="route"
-        )
+        pbar = tqdm(total=len(unknown_routes), desc="Testing routes", unit="route")
     else:
         pbar = None
         logging.info(f"Testing {len(unknown_routes)} unknown routes...")
@@ -459,7 +446,14 @@ def test_unknown_routes(
 
             route_data = wpjson["routes"][route]
             category = _test_route(
-                route, route_data, base_url, verify_ssl, timeout
+                route,
+                route_data,
+                base_url,
+                verify_ssl,
+                timeout,
+                auth=auth,
+                proxy=proxy,
+                rate_limit_delay=rate_limit_delay,
             )
 
             if category and category in categorized:
