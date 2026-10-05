@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased]
+## 1.0.9 (2026-10-05)
 
 ### Added
 - **SQLite indexer** (`wparc index <domain>`): builds a single-table

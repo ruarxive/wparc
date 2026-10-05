@@ -10,6 +10,6 @@ websites using the WordPress REST API.
     consistency check can be added to enforce this (see ``IMPROVEMENT_SUGGESTIONS.md``).
 """
 
-__version__ = "1.0.8"
+__version__ = "1.0.9"
 __author__ = "Ivan Begtin"
 __license__ = "MIT"
